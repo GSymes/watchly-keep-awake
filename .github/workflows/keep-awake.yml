@@ -1,0 +1,37 @@
+# Pings Watchly (https://watchly.azurewebsites.net) so the Azure Free-tier site stays awake and its
+# background jobs run: new-episode checks, provider refreshes and the 6pm notification round-up.
+# This repo is public on purpose: Actions on public repos are free and unlimited, so this doesn't use
+# the 2,000 free minutes a month that private repos share. The app itself lives in the private repo GSymes/Watchly.
+name: Keep Watchly awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+    - cron: "0 3 1 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    if: github.event.schedule != '0 3 1 * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping the site
+        run: curl --silent --show-error --max-time 60 --output /dev/null --write-out "%{http_code}\n" https://watchly.azurewebsites.net/health || true
+
+  # GitHub turns off schedules in public repos after 60 days without a commit,
+  # so on the 1st of each month this makes an empty commit to keep the ping running.
+  stay-enabled:
+    if: github.event.schedule == '0 3 1 * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Empty commit
+        run: |
+          git config user.name "watchly-keep-awake"
+          git config user.email "actions@users.noreply.github.com"
+          git commit --allow-empty -m "Monthly keep-alive (stops GitHub pausing the schedule)"
+          git push
